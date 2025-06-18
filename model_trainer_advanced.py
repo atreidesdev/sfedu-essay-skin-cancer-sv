@@ -1,10 +1,11 @@
-from keras import layers, models, applications, callbacks
-from data_loader import load_data
-from config import NUM_CLASSES, MODEL_SAVE_PATH
 import os
 import keras
 import numpy as np
+from keras import layers, models, applications, callbacks
+from data_loader import load_data
+from config import NUM_CLASSES, MODEL_SAVE_PATH
 from evaluation import evaluate_models
+
 
 class ModelTrainer:
     def __init__(self, model_type, input_shape=(128, 128, 3)):
@@ -31,20 +32,53 @@ class ModelTrainer:
         image_input = layers.Input(shape=self.input_shape, name='image_input')
         metadata_input = layers.Input(shape=(3,), name='metadata_input')
         
-        x = layers.Conv2D(32, (3, 3), activation='relu')(image_input)
+        x = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(image_input)
+        x = layers.BatchNormalization()(x)
+        x = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(x)
+        x = layers.BatchNormalization()(x)
         x = layers.MaxPooling2D((2, 2))(x)
-        x = layers.Conv2D(64, (3, 3), activation='relu')(x)
+        x = layers.Dropout(0.25)(x)
+        
+        x = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(x)
+        x = layers.BatchNormalization()(x)
+        x = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(x)
+        x = layers.BatchNormalization()(x)
         x = layers.MaxPooling2D((2, 2))(x)
+        x = layers.Dropout(0.25)(x)
+        
+        x = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(x)
+        x = layers.BatchNormalization()(x)
+        x = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(x)
+        x = layers.BatchNormalization()(x)
+        x = layers.MaxPooling2D((2, 2))(x)
+        x = layers.Dropout(0.25)(x)
+        
         x = layers.Flatten()(x)
         
-        metadata_dense = layers.Dense(32, activation='relu')(metadata_input)
+        metadata_dense = layers.Dense(64, activation='relu')(metadata_input)
+        metadata_dense = layers.BatchNormalization()(metadata_dense)
+        metadata_dense = layers.Dropout(0.3)(metadata_dense)
+        
         combined = layers.Concatenate()([x, metadata_dense])
         
-        x = layers.Dense(64, activation='relu')(combined)
+        x = layers.Dense(256, activation='relu')(combined)
+        x = layers.BatchNormalization()(x)
+        x = layers.Dropout(0.5)(x)
+        x = layers.Dense(128, activation='relu')(x)
+        x = layers.BatchNormalization()(x)
+        x = layers.Dropout(0.5)(x)
         x = layers.Dense(NUM_CLASSES, activation='softmax')(x)
         
         model = models.Model(inputs=[image_input, metadata_input], outputs=x)
-        model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+        
+        model.compile(
+            optimizer=keras.optimizers.Adam(learning_rate=0.001),
+            loss='categorical_crossentropy',
+            metrics=['accuracy', 
+                    keras.metrics.Precision(),
+                    keras.metrics.Recall(),
+                    keras.metrics.AUC()]
+        )
         return model
 
     def _build_mobilenet(self):
@@ -60,16 +94,33 @@ class ModelTrainer:
         
         x = self.base_model(image_input)
         x = layers.GlobalAveragePooling2D()(x)
+        x = layers.BatchNormalization()(x)
+        x = layers.Dropout(0.3)(x)
         
-        metadata_dense = layers.Dense(32, activation='relu')(metadata_input)
+        metadata_dense = layers.Dense(64, activation='relu')(metadata_input)
+        metadata_dense = layers.BatchNormalization()(metadata_dense)
+        metadata_dense = layers.Dropout(0.3)(metadata_dense)
+        
         combined = layers.Concatenate()([x, metadata_dense])
         
-        x = layers.Dense(256, activation='relu')(combined)
+        x = layers.Dense(512, activation='relu')(combined)
+        x = layers.BatchNormalization()(x)
+        x = layers.Dropout(0.5)(x)
+        x = layers.Dense(256, activation='relu')(x)
+        x = layers.BatchNormalization()(x)
         x = layers.Dropout(0.5)(x)
         x = layers.Dense(NUM_CLASSES, activation='softmax')(x)
         
         model = models.Model(inputs=[image_input, metadata_input], outputs=x)
-        model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+        
+        model.compile(
+            optimizer=keras.optimizers.Adam(learning_rate=0.001),
+            loss='categorical_crossentropy',
+            metrics=['accuracy',
+                    keras.metrics.Precision(),
+                    keras.metrics.Recall(),
+                    keras.metrics.AUC()]
+        )
         return model
 
     def _build_vgg16(self):
@@ -85,15 +136,33 @@ class ModelTrainer:
         self.base_model.trainable = False
         
         x = self.base_model(image_input)
-        metadata_dense = layers.Dense(32, activation='relu')(metadata_input)
+        x = layers.BatchNormalization()(x)
+        x = layers.Dropout(0.3)(x)
+        
+        metadata_dense = layers.Dense(64, activation='relu')(metadata_input)
+        metadata_dense = layers.BatchNormalization()(metadata_dense)
+        metadata_dense = layers.Dropout(0.3)(metadata_dense)
+        
         combined = layers.Concatenate()([x, metadata_dense])
         
-        x = layers.Dense(256, activation='relu')(combined)
+        x = layers.Dense(512, activation='relu')(combined)
+        x = layers.BatchNormalization()(x)
+        x = layers.Dropout(0.5)(x)
+        x = layers.Dense(256, activation='relu')(x)
+        x = layers.BatchNormalization()(x)
         x = layers.Dropout(0.5)(x)
         x = layers.Dense(NUM_CLASSES, activation='softmax')(x)
         
         model = models.Model(inputs=[image_input, metadata_input], outputs=x)
-        model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+        
+        model.compile(
+            optimizer=keras.optimizers.Adam(learning_rate=0.001),
+            loss='categorical_crossentropy',
+            metrics=['accuracy',
+                    keras.metrics.Precision(),
+                    keras.metrics.Recall(),
+                    keras.metrics.AUC()]
+        )
         return model
 
     def _build_resnet50(self):
@@ -109,15 +178,33 @@ class ModelTrainer:
         self.base_model.trainable = False
         
         x = self.base_model(image_input)
-        metadata_dense = layers.Dense(32, activation='relu')(metadata_input)
+        x = layers.BatchNormalization()(x)
+        x = layers.Dropout(0.3)(x)
+        
+        metadata_dense = layers.Dense(64, activation='relu')(metadata_input)
+        metadata_dense = layers.BatchNormalization()(metadata_dense)
+        metadata_dense = layers.Dropout(0.3)(metadata_dense)
+        
         combined = layers.Concatenate()([x, metadata_dense])
         
-        x = layers.Dense(256, activation='relu')(combined)
+        x = layers.Dense(512, activation='relu')(combined)
+        x = layers.BatchNormalization()(x)
+        x = layers.Dropout(0.5)(x)
+        x = layers.Dense(256, activation='relu')(x)
+        x = layers.BatchNormalization()(x)
         x = layers.Dropout(0.5)(x)
         x = layers.Dense(NUM_CLASSES, activation='softmax')(x)
         
         model = models.Model(inputs=[image_input, metadata_input], outputs=x)
-        model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+        
+        model.compile(
+            optimizer=keras.optimizers.Adam(learning_rate=0.001),
+            loss='categorical_crossentropy',
+            metrics=['accuracy',
+                    keras.metrics.Precision(),
+                    keras.metrics.Recall(),
+                    keras.metrics.AUC()]
+        )
         return model
 
     def _build_efficientnet(self):
@@ -133,28 +220,49 @@ class ModelTrainer:
         self.base_model.trainable = False
         
         x = self.base_model(image_input)
-        metadata_dense = layers.Dense(32, activation='relu')(metadata_input)
+        x = layers.BatchNormalization()(x)
+        x = layers.Dropout(0.3)(x)
+        
+        metadata_dense = layers.Dense(64, activation='relu')(metadata_input)
+        metadata_dense = layers.BatchNormalization()(metadata_dense)
+        metadata_dense = layers.Dropout(0.3)(metadata_dense)
+        
         combined = layers.Concatenate()([x, metadata_dense])
         
-        x = layers.Dense(256, activation='relu')(combined)
+        x = layers.Dense(512, activation='relu')(combined)
+        x = layers.BatchNormalization()(x)
+        x = layers.Dropout(0.5)(x)
+        x = layers.Dense(256, activation='relu')(x)
+        x = layers.BatchNormalization()(x)
         x = layers.Dropout(0.5)(x)
         x = layers.Dense(NUM_CLASSES, activation='softmax')(x)
         
         model = models.Model(inputs=[image_input, metadata_input], outputs=x)
-        model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+        
+        model.compile(
+            optimizer=keras.optimizers.Adam(learning_rate=0.001),
+            loss='categorical_crossentropy',
+            metrics=['accuracy',
+                    keras.metrics.Precision(),
+                    keras.metrics.Recall(),
+                    keras.metrics.AUC()]
+        )
         return model
 
     def unfreeze_layers(self, num_layers=10):
-        """Разморозка верхних слоев базовой модели"""
         if self.base_model is None:
             return
+            
         for layer in self.base_model.layers[-num_layers:]:
             layer.trainable = True
             
         self.model.compile(
             optimizer=keras.optimizers.Adam(learning_rate=1e-5),
             loss='categorical_crossentropy',
-            metrics=['accuracy']
+            metrics=['accuracy',
+                    keras.metrics.Precision(),
+                    keras.metrics.Recall(),
+                    keras.metrics.AUC()]
         )
 
 def train_models_advanced():
@@ -162,10 +270,10 @@ def train_models_advanced():
 
     model_configs = [
         ('simple_cnn', 30, 0),
-        ('mobilenetv2', 15, 20),
-        ('vgg16', 15, 20),
-        ('resnet50', 15, 25),
-        ('efficientnet', 15, 25)
+        ('mobilenetv2', 20, 20),
+        ('vgg16', 20, 20),
+        ('resnet50', 20, 25),
+        ('efficientnet', 20, 25)
     ]
     
     histories = {}
@@ -184,7 +292,8 @@ def train_models_advanced():
         early_stop = callbacks.EarlyStopping(
             monitor='val_loss',
             patience=5,
-            restore_best_weights=True
+            restore_best_weights=True,
+            verbose=1
         )
         
         checkpoint = callbacks.ModelCheckpoint(
@@ -192,14 +301,23 @@ def train_models_advanced():
             monitor='val_loss',
             save_best_only=True,
             mode='min',
-            save_weights_only=False
+            save_weights_only=False,
+            verbose=1
         )
         
         reduce_lr = callbacks.ReduceLROnPlateau(
             monitor='val_loss',
             factor=0.2,
             patience=3,
-            min_lr=1e-6
+            min_lr=1e-6,
+            verbose=1
+        )
+        
+        tensorboard = callbacks.TensorBoard(
+            log_dir=os.path.join('logs', model_type),
+            histogram_freq=1,
+            write_graph=True,
+            write_images=True
         )
         
         print(f"[INFO] Этап 1: Обучение с замороженными слоями ({epochs_before} эпох)")
@@ -207,7 +325,8 @@ def train_models_advanced():
             train_gen,
             epochs=epochs_before,
             validation_data=val_gen,
-            callbacks=[early_stop, checkpoint, reduce_lr]
+            callbacks=[early_stop, checkpoint, reduce_lr, tensorboard],
+            verbose=1
         )
         
         if epochs_after > 0:
@@ -219,7 +338,8 @@ def train_models_advanced():
                 train_gen,
                 epochs=epochs_after,
                 validation_data=val_gen,
-                callbacks=[early_stop, checkpoint, reduce_lr]
+                callbacks=[early_stop, checkpoint, reduce_lr, tensorboard],
+                verbose=1
             )
             
             history = {
@@ -228,6 +348,11 @@ def train_models_advanced():
                 'val_loss': history1.history['val_loss'] + history2.history['val_loss'],
                 'val_accuracy': history1.history['val_accuracy'] + history2.history['val_accuracy']
             }
+            
+            for metric in ['precision', 'recall', 'auc']:
+                if metric in history1.history and metric in history2.history:
+                    history[metric] = history1.history[metric] + history2.history[metric]
+                    history[f'val_{metric}'] = history1.history[f'val_{metric}'] + history2.history[f'val_{metric}']
         else:
             history = history1.history
         
@@ -257,4 +382,4 @@ def train_models_advanced():
     print("[INFO] Оценка всех моделей...")
     evaluate_models(trained_models, val_gen)
     
-    return trained_models, histories 
+    return trained_models, histories

@@ -6,14 +6,22 @@ from config import CSV_PATH, RESULT_PATH, CLASS_NAMES
 
 def visualize_dataset():
     df = pd.read_csv(CSV_PATH)
-    df = df[df['dx'].isin(CLASS_NAMES)]
+    
+    required_columns = ['label', 'age', 'sex', 'localization']
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        raise ValueError(f"[ERROR] В датасете отсутствуют следующие столбцы: {missing_columns}")
+    
+    df = df[df['label'].isin(range(len(CLASS_NAMES)))]
     
     os.makedirs(RESULT_PATH, exist_ok=True)
     
     plt.figure(figsize=(12, 6))
-    sns.countplot(data=df, x='dx')
+    sns.countplot(data=df, x='label')
     plt.title('Распределение классов в датасете')
-    plt.xticks(rotation=45)
+    plt.xlabel('Класс')
+    plt.ylabel('Количество')
+    plt.xticks(range(len(CLASS_NAMES)), CLASS_NAMES, rotation=45)
     plt.tight_layout()
     plt.savefig(os.path.join(RESULT_PATH, 'class_distribution.png'))
     plt.close()
@@ -47,7 +55,7 @@ def visualize_dataset():
     numeric_df = df[['age']].copy()
     numeric_df['sex'] = pd.Categorical(df['sex']).codes
     numeric_df['localization'] = pd.Categorical(df['localization']).codes
-    numeric_df['dx'] = pd.Categorical(df['dx']).codes
+    numeric_df['label'] = df['label']
     
     sns.heatmap(numeric_df.corr(), annot=True, cmap='coolwarm')
     plt.title('Корреляция между признаками')
@@ -56,9 +64,11 @@ def visualize_dataset():
     plt.close()
     
     plt.figure(figsize=(12, 6))
-    sns.boxplot(data=df, x='dx', y='age')
+    sns.boxplot(data=df, x='label', y='age')
     plt.title('Распределение возраста по классам')
-    plt.xticks(rotation=45)
+    plt.xlabel('Класс')
+    plt.ylabel('Возраст')
+    plt.xticks(range(len(CLASS_NAMES)), CLASS_NAMES, rotation=45)
     plt.tight_layout()
     plt.savefig(os.path.join(RESULT_PATH, 'age_by_class.png'))
     plt.close()
@@ -66,7 +76,9 @@ def visualize_dataset():
     print("\nСтатистика датасета:")
     print(f"Общее количество изображений: {len(df)}")
     print("\nРаспределение по классам:")
-    print(df['dx'].value_counts())
+    class_counts = df['label'].value_counts().sort_index()
+    for i, count in class_counts.items():
+        print(f"{CLASS_NAMES[i]}: {count}")
     print("\nСтатистика по возрасту:")
     print(df['age'].describe())
     print("\nРаспределение по полу:")
